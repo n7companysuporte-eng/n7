@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestão Hamburgueria PRO</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
+body{background:#0f0c29;color:#fff;}
+
+.app{max-width:420px;margin:auto;min-height:100vh;display:flex;flex-direction:column;}
+
+header{padding:20px;background:linear-gradient(135deg,#1f1c2c,#302b63);font-weight:600;}
+
+.screen{display:none;padding:20px;flex:1;overflow:auto;}
+.active{display:block;}
+
+.card{background:#1c1a3a;padding:15px;border-radius:15px;margin-bottom:10px;}
+
+input,select{
+width:100%;padding:10px;margin-top:5px;border-radius:10px;border:none;background:#2a275a;color:#fff;
+}
+
+button{
+width:100%;padding:12px;margin-top:10px;border:none;border-radius:12px;background:#6c5ce7;color:#fff;font-weight:600;
+}
+
+button.danger{background:#e74c3c;}
+
+.nav{display:flex;justify-content:space-around;background:#1f1c2c;padding:10px;}
+.nav button{background:none;color:#fff;font-size:12px;}
+
+canvas{background:#fff;border-radius:10px;margin-top:10px;}
+.alert{color:#ff7675;font-size:13px;}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<header>Painel Inteligente</header>
+
+<!-- HOME -->
+<div id="home" class="screen active"></div>
+
+<!-- FINANCEIRO -->
+<div id="financeiro" class="screen">
+<div class="card">
+<input type="number" id="valor" placeholder="Valor (opcional)">
+<button onclick="addFinanceiro()">Adicionar Faturamento</button>
+</div>
+
+<div id="listaFinanceiro"></div>
+<canvas id="grafico" height="200"></canvas>
+</div>
+
+<!-- ESTOQUE -->
+<div id="estoque" class="screen">
+<div class="card">
+<input id="nomeItem" placeholder="Nome do item">
+<input type="number" id="qtdItem" placeholder="Quantidade">
+<button onclick="addEstoque()">Adicionar Estoque</button>
+</div>
+
+<div id="listaEstoque"></div>
+</div>
+
+<!-- RELATORIO -->
+<div id="relatorio" class="screen">
+<div class="card">
+<select id="tipoRel">
+<option value="fin">Faturamento</option>
+<option value="est">Estoque</option>
+</select>
+
+<select id="filtro">
+<option value="7">Últimos 7 dias</option>
+<option value="15">Últimos 15 dias</option>
+<option value="30">Últimos 30 dias</option>
+<option value="custom">Personalizado</option>
+</select>
+
+<input type="date" id="dataInicio">
+<input type="date" id="dataFim">
+
+<button onclick="gerarRelatorio()">Gerar Relatório</button>
+<button onclick="exportarWhats()">Exportar WhatsApp</button>
+<button onclick="exportarExcel()">Exportar Excel</button>
+</div>
+
+<div id="resultado"></div>
+</div>
+
+<!-- NAV -->
+<div class="nav">
+<button onclick="nav('home')">INÍCIO</button>
+<button onclick="nav('financeiro')">FINANCEIRO</button>
+<button onclick="nav('estoque')">ESTOQUE</button>
+<button onclick="nav('relatorio')">RELATÓRIOS</button>
+</div>
+
+</div>
+
+<script>
+
+let financeiro = JSON.parse(localStorage.getItem('fin')||'[]');
+let estoque = JSON.parse(localStorage.getItem('est')||'[]');
+
+function nav(id){
+document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+document.getElementById(id).classList.add('active');
+renderHome();
+}
+
+function salvar(){
+localStorage.setItem('fin',JSON.stringify(financeiro));
+localStorage.setItem('est',JSON.stringify(estoque));
+render();
+renderHome();
+}
+
+// DASHBOARD
+function renderHome(){
+let hoje=new Date().toDateString();
+
+let hojeTotal=financeiro.filter(f=>new Date(f.data).toDateString()==hoje)
+.reduce((a,b)=>a+b.valor,0);
+
+let semanaTotal=financeiro.filter(f=>{
+let d=new Date(f.data);
+let limite=new Date();
+limite.setDate(limite.getDate()-7);
+return d>=limite;
+}).reduce((a,b)=>a+b.valor,0);
+
+let estoqueTotal=estoque.reduce((a,b)=>a+b.qtd,0);
+
+let baixo=estoque.filter(e=>e.qtd<=5);
+
+document.getElementById('home').innerHTML=`
+<div class="card">Faturamento Hoje: R$ ${hojeTotal}</div>
+<div class="card">Últimos 7 dias: R$ ${semanaTotal}</div>
+<div class="card">Total em Estoque: ${estoqueTotal}</div>
+<div class="card">Itens com estoque baixo: ${baixo.length}
+${baixo.map(i=>`<div class="alert">${i.nome} (${i.qtd})</div>`).join('')}
+</div>
+`;
+}
+
+// FINANCEIRO
+function addFinanceiro(){
+let v=document.getElementById('valor').value || 0;
+financeiro.push({valor:parseFloat(v),data:new Date().toISOString()});
+salvar();
+}
+
+function removerFinanceiro(i){
+financeiro.splice(i,1);
+salvar();
+}
+
+// ESTOQUE
+function addEstoque(){
+let nome=document.getElementById('nomeItem').value.toLowerCase();
+let qtd=parseInt(document.getElementById('qtdItem').value);
+
+let item=estoque.find(e=>e.nome===nome);
+if(item){item.qtd+=qtd;} else{estoque.push({nome,qtd});}
+salvar();
+}
+
+function removerEstoque(i){
+estoque.splice(i,1);
+salvar();
+}
+
+// RENDER
+function render(){
+document.getElementById('listaFinanceiro').innerHTML=
+financeiro.map((f,i)=>`
+<div class="card">R$ ${f.valor}
+<br>${new Date(f.data).toLocaleDateString()}
+<button class="danger" onclick="removerFinanceiro(${i})">Remover</button>
+</div>`).join('');
+
+document.getElementById('listaEstoque').innerHTML=
+estoque.map((e,i)=>`
+<div class="card">${e.nome} - ${e.qtd}
+<button class="danger" onclick="removerEstoque(${i})">Remover</button>
+</div>`).join('');
+
+grafico();
+}
+
+// GRAFICO AGRUPADO
+function grafico(){
+let ctx=document.getElementById('grafico').getContext('2d');
+ctx.clearRect(0,0,400,200);
+
+let dias={};
+
+financeiro.forEach(f=>{
+let d=new Date(f.data).toLocaleDateString();
+dias[d]=(dias[d]||0)+f.valor;
+});
+
+let keys=Object.keys(dias).slice(-7);
+
+keys.forEach((k,i)=>{
+let val=dias[k];
+ctx.fillStyle="#6c5ce7";
+ctx.fillRect(i*50,200-val,30,val);
+});
+}
+
+// RELATORIO
+function gerarRelatorio(){
+let tipo=document.getElementById('tipoRel').value;
+
+if(tipo=='fin'){
+let total=financeiro.reduce((a,b)=>a+b.valor,0);
+document.getElementById('resultado').innerHTML=
+`<div class="card">Faturamento total: R$ ${total}</div>`;
+}else{
+let total=estoque.reduce((a,b)=>a+b.qtd,0);
+document.getElementById('resultado').innerHTML=
+`<div class="card">Itens em estoque: ${total}</div>`;
+}
+}
+
+// EXPORT
+function exportarWhats(){
+let texto="Relatório:%0A";
+financeiro.forEach(f=>{
+texto+=`R$ ${f.valor} - ${new Date(f.data).toLocaleDateString()}%0A`;
+});
+window.open(`https://wa.me/?text=${texto}`);
+}
+
+function exportarExcel(){
+let csv="data,valor\n";
+financeiro.forEach(f=>{
+csv+=`${f.data},${f.valor}\n`;
+});
+let blob=new Blob([csv]);
+let a=document.createElement('a');
+a.href=URL.createObjectURL(blob);
+a.download="relatorio.csv";
+a.click();
+}
+
+// INIT
+render();
+renderHome();
+
+</script>
+
+</body>
+</html>
